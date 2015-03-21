@@ -16,6 +16,7 @@ extern RT_TASK tconnect;
 extern RT_TASK tmove;
 extern RT_TASK tenvoyer;
 extern RT_TASK tBattery;       //<======= Thread battery
+extern RT_TASK tMission;       //<======= Thread Mission
 
 /* @descripteurs des mutex */
 extern RT_MUTEX mutexEtat;
@@ -27,6 +28,7 @@ extern RT_MUTEX mutexStatus; //******* Mutex status
 /* @descripteurs des sempahore */
 extern RT_SEM semConnecterRobot;
 extern RT_SEM semBattery ;      //<======= Sem battery
+extern RT_SEM semMission ;      //<======= Sem mission
 
 /* @descripteurs des files de messages */
 extern RT_QUEUE queueMsgGUI;
@@ -48,6 +50,7 @@ extern int PRIORITY_TCONNECT;
 extern int PRIORITY_TMOVE;
 extern int PRIORITY_TENVOYER;
 extern int PRIORITY_TBAT;
+extern int PRIORITY_TMission;
 
 
 #endif	/* GLOBAL_H */

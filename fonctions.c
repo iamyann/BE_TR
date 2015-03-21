@@ -1,4 +1,5 @@
 #include "fonctions.h"
+#include <math.h>
 
 int write_in_queue(RT_QUEUE *msgQueue, void * data, int size);
 
@@ -8,11 +9,14 @@ void envoyer(void * arg) {
 
     while (1) {
         rt_printf("tenvoyer : Attente d'un message\n");
-        if ((err = rt_queue_read(&queueMsgGUI, &msg, sizeof (DMessage), TM_INFINITE)) >= 0) {
+        if ((err = rt_queue_read(&queueMsgGUI, &msg, sizeof (DMessage), TM_INFINITE)) >= 0) 
+		{
             rt_printf("tenvoyer : envoi d'un message au moniteur\n");
             serveur->send(serveur, msg);
             msg->free(msg);
-        } else {
+        }
+		else 
+		{
             rt_printf("Error msg queue write: %s\n", strerror(-err));
         }
     }
@@ -100,15 +104,18 @@ void communiquer(void *arg) {
 
 void deplacer(void *arg) {
     int status = 1;
+    int speed,direction;
     int gauche;
     int droite;
     DMessage *message;
+    DMessage *msgRcu = d_new_message();
 
-    rt_printf("tmove : Debut de l'éxecution de periodique à 1s\n");
-    rt_task_set_periodic(NULL, TM_NOW, 1000000000);
+    rt_printf("tmove : Debut de l'éxecution de periodique à 200ms\n");
+    rt_task_set_periodic(NULL, TM_NOW, 200000000);
 
     while (1) {
         /* Attente de l'activation périodique */
+         
         rt_task_wait_period(NULL);
         rt_printf("tmove : Activation périodique\n");
 
@@ -118,7 +125,9 @@ void deplacer(void *arg) {
 
         if (status == STATUS_OK) {
             rt_mutex_acquire(&mutexMove, TM_INFINITE);
-            switch (move->get_direction(move)) {
+            direction=move->get_direction(move);
+            speed=move->get_speed(move);
+            switch (direction) {
                 case DIRECTION_FORWARD:
                     gauche = MOTEUR_ARRIERE_LENT;
                     droite = MOTEUR_ARRIERE_LENT;
@@ -140,11 +149,14 @@ void deplacer(void *arg) {
                     droite = MOTEUR_AVANT_LENT;
                     break;
             }
+            move->set(move,direction,speed);
+            rt_printf("tmove : Direction =%d , Speed= %d\n",direction,speed);
             rt_mutex_release(&mutexMove);
-
+            
             status = robot->set_motors(robot, gauche, droite);
 
-            if (status != STATUS_OK) {
+            if (status != STATUS_OK) 
+            {
                 rt_mutex_acquire(&mutexEtat, TM_INFINITE);
                 etatCommRobot = status;
                 rt_mutex_release(&mutexEtat);
@@ -185,8 +197,6 @@ int verifier_com_robot(int status) {
     DMessage *message;
 
     rt_printf("STATUS_OK = %d \n", STATUS_OK);
-    //rt_printf("STATUS = %d \n", status);
-
     if (status != STATUS_OK) 
     {
         rt_printf("La communication avec le robot n'est pas OK!\n");
@@ -252,7 +262,7 @@ int verifier_com_robot(int status) {
 
 void get_etat_battery(void *arg)
 {
-    int status,i,j;
+    int status,i;
     DMessage *messBat;
     DBattery *battery;
 	
@@ -266,7 +276,9 @@ void get_etat_battery(void *arg)
 			
 			rt_printf("******************* tBattery : Attente du sémarphore semtBattery ****\n"); 
 			rt_sem_p(&semBattery, TM_INFINITE);
-			j=1;
+                        rt_printf("************** tBattery : Activation periodique *****\n");
+			rt_task_wait_period(NULL);
+
 			rt_mutex_acquire(&mutexEtat, TM_INFINITE);
 			status = robot->open_device(robot); //Permet d'ouvrir le port de communication pour permettre la communication avec le robot.
 			rt_mutex_release(&mutexEtat);
@@ -284,16 +296,13 @@ void get_etat_battery(void *arg)
 					rt_printf("******************* tBattery : Etat Communication Superviseur-Robot = OK *****\n");   
 					rt_printf("*************** tBattery : Récupération de l'etat Batterie du robot ****\n");          
 					
-					while (j!=0) 
-					{
-						rt_printf("************** tBattery : Activation periodique *****\n");
-						rt_task_wait_period(NULL);
-						rt_mutex_acquire(&mutexStatus, TM_INFINITE);
-						status=robot->get_vbat(robot,&etatBattery);   
-						i=verifier_com_robot(status);
-						rt_mutex_release(&mutexStatus);
-						j=0;
-					}
+					
+						
+					rt_mutex_acquire(&mutexStatus, TM_INFINITE);
+					status=robot->get_vbat(robot,&etatBattery);   
+					i=verifier_com_robot(status);
+					rt_mutex_release(&mutexStatus);
+						
 					if (i == STATUS_OK) 
 					{
 							rt_printf("***************** tBattery : STATUS-Batterie = OK *****\n");
@@ -341,7 +350,6 @@ void get_etat_battery(void *arg)
 				 
 			rt_printf("***************** Mise a jour de la vue connexion Robot Affichage********\n");     
 			battery->print(battery);
-			messBat->print(messBat);
 
 			if (write_in_queue(&queueMsgGUI, messBat, sizeof (DMessage)) < 0) 
 			{
@@ -349,5 +357,112 @@ void get_etat_battery(void *arg)
 			}
 				
 		
+    }
+}
+
+void realise_Mission(void *arg)
+{
+    
+    int id,sens,status;
+    float distance,theta;
+    float Pi=3.14159;
+    float X,Y;
+    
+    DMission *myMission = d_new_mission();
+    DPosition *myPosition = d_new_position();
+    DMessage *message = d_new_message();
+
+    while(1)
+    {
+        rt_printf("================> tMission : Attente du sémaphore semMission\n");
+        rt_sem_p(&semMission, TM_INFINITE);
+
+        if(serveur->active==0)
+	{
+		rt_printf("================> tMission : Reconnexion avec le moniteur *****\n");
+		serveur->open(serveur, "8000");
+	}				
+	serveur->send(serveur, message);
+        serveur->receive(serveur,message);
+        
+        id = myMission -> get_id(myMission);
+
+        if(message->get_type(message)==MESSAGE_TYPE_MISSION)
+        {
+            rt_printf("================> tMission : MESSAGE_TYPE_MISSION\n");
+            rt_printf("================> tMission : MISSION_TYPE_REACH_COORDINATE X=%d   Y=%d\n",myMission->x,myMission->y);            
+            
+            X = myMission->x - myPosition->x;
+            Y = myMission->y - myPosition->y;            
+
+            distance = sqrt(pow(X,2) + pow(Y,2));// Racine_carré(X²+Y²)
+            
+            distance = distance / 5.85; // conversion en cm => rapport 5.85 = 1cm
+            distance = distance * 10; //passage en millimètres.
+            
+            if(X > 0) 
+            {
+                theta = ((myPosition->get_orientation(myPosition))*180./Pi) - (atanf(Y/X)*180./Pi);// on peut aussi tester en tournant de 5° || get_orientation==>Valeur de l'orientation en radian de la position
+            }
+            else if(X < 0)
+            {
+                theta = ((myPosition->get_orientation(myPosition))*180./Pi)- (180 + atanf(Y/X)*180./Pi);
+            }
+            
+			
+			// Rester dans l'intervalle [0-180°]
+            if(theta < -180.)
+            {
+                theta = 360. + theta;
+            }
+            else if (theta > 180.)
+            {
+                theta = theta - 360.;
+            }
+            
+
+            if(theta > 0)
+            {
+                sens = ANTI_HORAIRE;
+            }
+            else if(theta < 0)
+            {
+                sens = HORAIRE;
+            }
+            
+
+            status = robot->move(robot, distance);           
+            if(status==STATUS_OK)
+            {
+                rt_printf("================> tMission : Robot avance de %d mm\n",distance);
+            }  
+            
+            status = robot->turn(robot, (int)theta, sens);
+            if(status==STATUS_OK)
+            {
+                if(sens==ANTI_HORAIRE)
+                {
+                    rt_printf("================> tMission : Robot a tourne de %d ° vers ANTI_HORAIRE\n",(int)theta);
+                }
+                else
+                {
+                    rt_printf("================> tMission : Robot a tourne de %d ° vers HORAIRE\n",(int)theta);   
+                }
+                
+            }           
+                      
+        }
+        
+        else if(message->get_type(message)==MISSION_TYPE_STOP)
+        {
+           rt_printf("================> tMission : MISSION_TYPE_STOP\n"); 
+           status = robot->stop(robot);
+        }
+
+        message -> mission_terminate(message, id);
+        serveur->send(serveur,message);
+        rt_printf("================> tMission : Mise a jour ViewMission\n"); 
+        myMission->print(myMission);
+
     }
 }

@@ -12,6 +12,7 @@ RT_TASK tconnect;
 RT_TASK tmove;
 RT_TASK tenvoyer;
 RT_TASK tBattery;       //<======= Thread battery
+RT_TASK tMission;       //<======= Thread Mission
 
 
 RT_MUTEX mutexEtat;
@@ -21,6 +22,7 @@ RT_MUTEX mutexStatus; //******* Mutex status
 
 RT_SEM semConnecterRobot;
 RT_SEM semBattery ;      //<======= Sem battery
+RT_SEM semMission ;      //<======= Sem mission
 
 
 RT_QUEUE queueMsgGUI;
@@ -41,3 +43,4 @@ int PRIORITY_TCONNECT = 20;
 int PRIORITY_TMOVE = 10;
 int PRIORITY_TENVOYER = 25;
 int PRIORITY_TBAT=15;
+int PRIORITY_TMission=9;

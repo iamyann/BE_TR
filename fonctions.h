@@ -20,6 +20,7 @@ extern "C" {
         void envoyer(void *arg);
         int verifier_com_robot(int status);
         void get_etat_battery(void *arg);
+        void realise_Mission(void *arg);
 #ifdef	__cplusplus
 }
 #endif
